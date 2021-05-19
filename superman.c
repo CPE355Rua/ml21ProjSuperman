@@ -5,50 +5,59 @@
  * Author : Sebastian Santos
  */ 
 
-#define F_CPU 16000000UL
 #include <avr/io.h>
-#include <util/delay.h>
+#include <avr/interrupt.h>
 
-unsigned int sec;
-unsigned char digit;
-char key;
+volatile char count,digit; /* set count as volatile  because the value will change in the ISR */
+int delay[3] = {0x0a,0x02,0x0a}; /* delay for green, yellow, red */
 
+int timeDelay(int x) /* set timer1 as 1 sec timer */
+{
+	int sec;
+	for (sec = 0; sec < delay[x]; sec++)
+	{
+		TCNT1 = 49911;
+		TCCR1B |= (1<<CS12) | (1<<CS10);
+		while (((TIFR1 & (1 << TOV1)) == 0) && (count < 5));
+		TIFR1 |= (1<<TOV1);
+	}
+	count = 0;
+	return 0;
+}
+int light(int y) /* turn on LED */
+{
+	DDRB = 0xff;
+	PORTB = ~digit;
+	timeDelay(y);
+	return 0;
+}
+ISR(INT0_vect) /* interrupt that handles counting of cars */
+{
+	if (digit == 0x04)
+		count ++;
+}
+ISR(INT1_vect) /* interrupts the loop to turn on the green light */
+{
+	int digit_save;
+	digit_save = digit;
+	digit = 0x04;
+	light(0);
+	digit = digit_save;
+}
 int main(void)
 {
-    while (1) 
-    {
-		light();
-    }
-}
-int light(void)
-{
+	DDRD = 0x00;
+	EICRA |= (1<<ISC11) | (1<<ISC01);
+	EIMSK |= (1<<INT1) | (1<<INT0);
+	sei();
+	while (1)
+	{
 		int i;
 		digit = 0x04;
 		for (i = 0; i < 3; i++)
 		{
-		    DDRB = 0xff;
-		    PORTB = ~digit;
-			if (i == 0){
-				while (sec != 30){
-					_delay_ms(1000);
-					sec++;
-				}
-				sec = 0;
-			}
-			if (i == 1){
-				while (sec != 4){
-					_delay_ms(1000);
-					sec++;
-				}
-				sec = 0;
-			}
-			if (i == 2){
-				while (sec != 20){
-					_delay_ms(1000);
-					sec++;
-				}
-				sec = 0;
-			}
+			light(i);
 			digit>>=1;
 		}
+	}
 }
